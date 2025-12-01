@@ -1,0 +1,23 @@
+# Secrets
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+
+# Project Artifacts
+generated_audio/
+rewritten_digests/
+*.mp3
+*.log
+digest_output.txt
+*.wav
+*.bin
+*.html
+*.png
+
+# System
+.DS_Store
