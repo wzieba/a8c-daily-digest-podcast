@@ -2,8 +2,6 @@ import os
 import sys
 import asyncio
 import subprocess
-import os
-import sys
 import re
 from datetime import datetime
 from dotenv import load_dotenv
@@ -147,31 +145,38 @@ Digest:
         return "Work Digest"
 
 def get_digest_text():
-    """Runs claude CLI to get the digest text using expect script."""
+    """Runs claude CLI to get the digest text."""
     print("Generating digest text using Claude...")
     try:
-        # Use expect script to handle interactive prompts
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        expect_script = os.path.join(script_dir, "get_digest.exp")
-        
+        # Read the prompt from the plugin file
+        prompt_path = os.path.expanduser("~/.claude/plugins/marketplaces/automattic-claude-code-plugins/plugins/context-a8c/commands/digest.md")
+
+        if not os.path.exists(prompt_path):
+            print(f"Error: Digest prompt file not found at {prompt_path}")
+            sys.exit(1)
+
+        with open(prompt_path, 'r') as f:
+            prompt_content = f.read()
+
+        print(f"Running Claude CLI with prompt from {prompt_path}")
+
         result = subprocess.run(
-            [expect_script],
+            ['claude', 'complete', '--dangerously-skip-permissions', '-p', prompt_content],
             capture_output=True,
             text=True,
-            check=True
+            check=True,
+            timeout=600  # 10 minute timeout
         )
-        # Clean up output - remove the "spawn" line from expect
-        output = result.stdout.strip()
-        lines = output.split('\n')
-        # Filter out lines that start with "spawn"
-        cleaned_lines = [line for line in lines if not line.startswith('spawn')]
-        return '\n'.join(cleaned_lines).strip()
+        return result.stdout.strip()
+    except subprocess.TimeoutExpired:
+        print("Warning: Claude digest generation timed out after 10 minutes.")
+        return ""
     except subprocess.CalledProcessError as e:
-        print(f"Error running claude via expect: {e}")
+        print(f"Error running claude: {e}")
         print(f"Stderr: {e.stderr}")
         sys.exit(1)
     except FileNotFoundError:
-        print("Error: 'expect' or 'get_digest.exp' not found.")
+        print("Error: 'claude' CLI not found.")
         sys.exit(1)
 
 async def generate_audio(text, output_file="digest.mp3", voice_name="Enceladus"):
@@ -319,54 +324,26 @@ async def main():
     
     print(f"Checking for digest file at: {digest_file_path}")
     
-    # Check for test digest first
-    test_digest_path = os.path.join(os.path.dirname(__file__), "test_digest.md")
-    
     text = "" # Initialize text variable
-    digest_content_found = False
-
-    if os.path.exists(test_digest_path):
-        print(f"Using test digest file: {test_digest_path}")
-        with open(test_digest_path, 'r', encoding='utf-8') as f:
-            text = f.read()
-        digest_content_found = True
-            
+    
     # Check for today's digest file
-    elif os.path.exists(digest_file_path):
+    if os.path.exists(digest_file_path):
         print(f"Digest file found at {digest_file_path}. Skipping generation.")
         with open(digest_file_path, 'r') as f:
             text = f.read()
-        digest_content_found = True
     else:
-        # Run Claude to generate the digest (we still need to run it to create the file)
+        # Run Claude to generate the digest
         print("Running Claude to generate digest...")
-        # We can still use the expect script to drive the interaction
-        try:
-            # Run the expect script and capture output (mostly for logging/debugging)
-            process = subprocess.Popen(
-                ['./get_digest.exp'], 
-                stdout=subprocess.PIPE, 
-                stderr=subprocess.PIPE,
-                text=True
-            )
-            stdout, stderr = process.communicate()
-            
-            if process.returncode != 0:
-                print(f"Error running expect script: {stderr}")
-                # We might continue if the file was created despite error code
-                
-        except Exception as e:
-            print(f"Failed to run Claude script: {e}")
-            sys.exit(1)
+        text = get_digest_text()
+        
+        # Save the generated text to the digest file
+        if text:
+            os.makedirs(os.path.dirname(digest_file_path), exist_ok=True)
+            with open(digest_file_path, 'w') as f:
+                f.write(text)
+            print(f"Digest saved to {digest_file_path}")
 
-    # Now read the file if we haven't already
-    if not digest_content_found:
-        if not os.path.exists(digest_file_path):
-            print(f"Error: Digest file not found at {digest_file_path}")
-            sys.exit(1)
-            
-        with open(digest_file_path, 'r') as f:
-            text = f.read()
+
             
     if not text:
         print("Error: Digest file is empty.")
