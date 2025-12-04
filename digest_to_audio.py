@@ -109,9 +109,13 @@ def rewrite_digest_with_claude(text, language_code="en"):
         print("Error: 'claude' CLI not found.")
         return clean_markdown_for_tts(text)
 
-def generate_summary_from_digest(text):
+def generate_summary_from_digest(text, language_code="en"):
     """Generate a one-sentence summary of the digest using Claude."""
     print("Generating summary for filename...")
+    
+    language_instruction = ""
+    if language_code != "en":
+        language_instruction = f"\n- Write the summary in {language_code} language."
     
     prompt = f"""Generate a brief, descriptive one-sentence summary (max 8 words) of this work digest for use in a filename.
     
@@ -119,7 +123,8 @@ Guidelines:
 - Focus on the most important or interesting items
 - Use concise, natural language
 - No punctuation at the end
-- Example: "WooCommerce builds and model migrations"
+- Output ONLY the summary, nothing else
+- Example: "WooCommerce builds and model migrations"{language_instruction}
     
 Digest:
 {text[:2000]}
@@ -184,38 +189,82 @@ def get_digest_text():
         print("Error: 'claude' CLI not found.")
         sys.exit(1)
 
-async def generate_audio(text, output_file="digest.mp3", voice_name="Enceladus"):
-    """Generates audio from text using Google Gemini API and converts to MP3."""
-    print(f"Generating audio with Gemini TTS (Voice: {voice_name})...")
+def parse_script_to_turns(script):
+    """Parse a script with 'Speaker: text' format into structured turns."""
+    turns = []
+    lines = script.strip().split('\n')
+
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+
+        # Match pattern "Speaker: text"
+        match = re.match(r'^([A-Za-z0-9]+):\s*(.+)$', line)
+        if match:
+            speaker, text = match.groups()
+            turns.append({
+                'speaker': speaker,
+                'text': text.strip()
+            })
+        else:
+            # If line doesn't match pattern, append to last turn if exists
+            if turns:
+                turns[-1]['text'] += ' ' + line
+
+    return turns
+
+async def generate_audio(text, output_file="digest.mp3"):
+    """Generates audio from text using Google Gemini API with multi-speaker support."""
+    print("Generating audio with Gemini multi-speaker TTS...")
+    print("  Female voice (Sarah): Callirrhoe")
+    print("  Male voice (Mike): Charon")
+
     try:
         from google import genai
         from google.genai import types
-        from pydub import AudioSegment
-        
+
         client = genai.Client(api_key=GOOGLE_API_KEY)
-        
+
         # Optimized prompt for 2-speaker podcast
         language_instruction = ""
         if SUMMARY_LANG != "en":
             language_instruction = f"Speak in {SUMMARY_LANG} language. "
-        
-        prompt = f"""{language_instruction}Generate an engaging audio podcast based on the following script.
-There are two speakers: Sarah (female voice) and Mike (male voice).
-Ensure they have distinct voices and personalities as described in the script.
-Use natural intonation, pauses, and conversational pacing.
 
-Script:
+        prompt = f"""{language_instruction}TTS the following conversation between Sarah and Mike:
 {text}"""
-        
+
         print(f"Sending request to Gemini TTS (Length: {len(prompt)} chars)...")
-        
-        # Use the Gemini 2.0 Flash Exp model for advanced audio generation
+
+        # Use the Gemini 2.5 Pro Preview TTS model with multi-speaker support
         try:
             response = client.models.generate_content(
                 model='gemini-2.5-pro-preview-tts',
                 contents=prompt,
                 config={
                     'response_modalities': ['AUDIO'],
+                    'speech_config': {
+                        'multi_speaker_voice_config': {
+                            'speaker_voice_configs': [
+                                {
+                                    'speaker': 'Sarah',
+                                    'voice_config': {
+                                        'prebuilt_voice_config': {
+                                            'voice_name': 'Callirrhoe'
+                                        }
+                                    }
+                                },
+                                {
+                                    'speaker': 'Mike',
+                                    'voice_config': {
+                                        'prebuilt_voice_config': {
+                                            'voice_name': 'Charon'
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
                 }
             )
         except Exception as api_error:
@@ -226,31 +275,42 @@ Script:
             elif "400" in str(api_error):
                 print("Tip: The request might be invalid or too long.")
             raise api_error
-        
+
         # Check if response has parts
         if not response.parts:
             print("Error: No content generated in response.")
             print(f"Response feedback: {response.prompt_feedback}")
             sys.exit(1)
-            
-        # Extract audio data
+
+        # Extract audio data (PCM format)
         audio_data = None
         for part in response.parts:
             if part.inline_data and part.inline_data.data:
                 audio_data = part.inline_data.data
                 break
-        
+
         if audio_data:
-            # Convert raw PCM to MP3
-            print("Converting raw PCM to MP3...")
-            audio = AudioSegment(
-                data=audio_data,
-                sample_width=2,  # 16-bit
-                frame_rate=24000,
-                channels=1
+            # Save PCM data to temporary file
+            pcm_file = output_file.replace('.mp3', '.pcm')
+            print(f"Saving PCM audio to {pcm_file}...")
+            with open(pcm_file, "wb") as f:
+                f.write(audio_data)
+
+            # Convert PCM to MP3 using ffmpeg for better quality
+            print(f"Converting to MP3 with ffmpeg...")
+            result = subprocess.run(
+                ['ffmpeg', '-f', 's16le', '-ar', '24000', '-ac', '1', '-i', pcm_file, '-y', output_file],
+                capture_output=True,
+                text=True
             )
-            audio.export(output_file, format="mp3")
-            print(f"Audio saved to {output_file}")
+
+            if result.returncode == 0:
+                print(f"Audio saved to {output_file}")
+                # Clean up PCM file
+                os.remove(pcm_file)
+            else:
+                print(f"Error converting with ffmpeg: {result.stderr}")
+                print(f"PCM file saved at: {pcm_file}")
         else:
             print("Error: No audio data found in response.")
             print(response)
@@ -358,7 +418,7 @@ async def main():
     print(f"Rewritten text length: {len(rewritten_text)} chars")
     
     # Extract title for filename (use original text for title extraction)
-    title = generate_summary_from_digest(text)
+    title = generate_summary_from_digest(text, language_code=SUMMARY_LANG)
     
     # Generate filename with date and summary
     date_str = datetime.now().strftime("%d %b %Y")
