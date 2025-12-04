@@ -29,7 +29,10 @@ This script automates the creation of an audio digest from a text summary genera
     POCKET_CASTS_EMAIL=your_email
     POCKET_CASTS_PASSWORD=your_password
     SUMMARY_LANG=en  # Optional: language code for the summary (default: en)
+    TTS_MODEL=gemini-2.5-flash-preview-tts  # Optional: flash (free tier, default) or pro (better quality, requires billing)
     ```
+
+    **Note**: The default `gemini-2.5-flash-preview-tts` works with Google AI Studio's free tier. For better audio quality, use `gemini-2.5-pro-preview-tts` (requires a billing account).
 
 ## Usage
 
@@ -43,7 +46,7 @@ python digest_to_audio.py
 The script will:
 1.  Run `claude "/context-a8c:digest"` to generate the digest text
 2.  Rewrite the digest into a podcast-style conversation between two hosts (Sarah and Mike)
-3.  Convert the text to audio using Google Gemini (`gemini-2.5-pro-preview-tts`) with multi-speaker TTS:
+3.  Convert the text to audio using Google Gemini TTS (configurable model, defaults to flash) with multi-speaker support:
     - **Sarah** (female voice): Callirrhoe
     - **Mike** (male voice): Charon
 4.  Convert the PCM audio to MP3 using ffmpeg

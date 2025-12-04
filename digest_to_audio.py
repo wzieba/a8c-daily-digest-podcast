@@ -13,6 +13,7 @@ load_dotenv()
 
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 SUMMARY_LANG = os.getenv("SUMMARY_LANG", "en")  # Default to English
+TTS_MODEL = os.getenv("TTS_MODEL", "gemini-2.5-flash-preview-tts")  # Default to flash (free tier)
 POCKET_CASTS_EMAIL = os.getenv("POCKET_CASTS_EMAIL")
 POCKET_CASTS_PASSWORD = os.getenv("POCKET_CASTS_PASSWORD")
 
@@ -216,7 +217,7 @@ def parse_script_to_turns(script):
 
 async def generate_audio(text, output_file="digest.mp3"):
     """Generates audio from text using Google Gemini API with multi-speaker support."""
-    print("Generating audio with Gemini multi-speaker TTS...")
+    print(f"Generating audio with Gemini multi-speaker TTS (Model: {TTS_MODEL})...")
     print("  Female voice (Sarah): Callirrhoe")
     print("  Male voice (Mike): Charon")
 
@@ -236,10 +237,10 @@ async def generate_audio(text, output_file="digest.mp3"):
 
         print(f"Sending request to Gemini TTS (Length: {len(prompt)} chars)...")
 
-        # Use the Gemini 2.5 Pro Preview TTS model with multi-speaker support
+        # Use the configured Gemini TTS model with multi-speaker support
         try:
             response = client.models.generate_content(
-                model='gemini-2.5-pro-preview-tts',
+                model=TTS_MODEL,
                 contents=prompt,
                 config={
                     'response_modalities': ['AUDIO'],
@@ -250,7 +251,7 @@ async def generate_audio(text, output_file="digest.mp3"):
                                     'speaker': 'Sarah',
                                     'voice_config': {
                                         'prebuilt_voice_config': {
-                                            'voice_name': 'Callirrhoe'
+                                            'voice_name': 'Charon'  # Swapped: flash model reverses the assignments
                                         }
                                     }
                                 },
@@ -258,7 +259,7 @@ async def generate_audio(text, output_file="digest.mp3"):
                                     'speaker': 'Mike',
                                     'voice_config': {
                                         'prebuilt_voice_config': {
-                                            'voice_name': 'Charon'
+                                            'voice_name': 'Callirrhoe'  # Swapped: flash model reverses the assignments
                                         }
                                     }
                                 }
