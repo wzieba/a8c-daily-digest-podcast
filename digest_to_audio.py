@@ -61,23 +61,23 @@ def rewrite_digest_with_claude(text, language_code="en"):
         language_instruction = f"\n    IMPORTANT: Write the entire script in {language_code} language."
     
     prompt = f"""
-    You are reformatting a work digest into a podcast script for text-to-speech.
+    You are writing a podcast script based on a work digest. 
+    There are two hosts:
+    1. Sarah (Female): Enthusiastic, leads the conversation, introduces topics.
+    2. Mike (Male): Analytical, adds depth, asks clarifying questions or provides details.
+
     {language_instruction}
     
-    CRITICAL RULES - DO NOT VIOLATE:
-    1. Use ONLY information from the digest below. Do NOT add, infer, or assume ANY details.
-    2. Do NOT mention specific dates, times, or events unless they are EXPLICITLY stated in the digest.
-    3. Do NOT add transitional phrases that imply future actions (like "next Wednesday", "upcoming meeting", etc.) unless explicitly stated.
-    4. If information is vague or unclear, keep it vague - do not clarify or expand on it.
+    CRITICAL RULES:
+    1. Use ONLY information from the digest.
+    2. Format the output as a script:
+       Sarah: [Text]
+       Mike: [Text]
+    3. Keep it conversational and natural.
+    4. Start with a catchy intro.
+    5. Do NOT mention specific dates unless explicitly stated.
     
-    Formatting Guidelines:
-    1. Start with: "Welcome back to your Daily Briefing. Here's what's happening today."
-    2. Remove ALL "LINK" mentions - simply state the information without referencing links.
-    3. Group related items naturally.
-    4. Use a conversational, radio-friendly tone.
-    5. No markdown formatting - plain text only.
-    
-    Here is the digest (use ONLY this information):
+    Digest:
     {text}
     """
     
@@ -145,23 +145,27 @@ Digest:
         return "Work Digest"
 
 def get_digest_text():
-    """Runs claude CLI to get the digest text."""
-    print("Generating digest text using Claude...")
+    """Runs claude CLI with the digest slash command to get the digest text."""
+    print("Generating digest text using Claude /digest command...")
     try:
-        # Read the prompt from the plugin file
-        prompt_path = os.path.expanduser("~/.claude/plugins/marketplaces/automattic-claude-code-plugins/plugins/context-a8c/commands/digest.md")
+        # Plugin directory for the context-a8c plugin
+        plugin_dir = os.path.expanduser("~/.claude/plugins/marketplaces/automattic-claude-code-plugins/plugins/context-a8c")
 
-        if not os.path.exists(prompt_path):
-            print(f"Error: Digest prompt file not found at {prompt_path}")
+        if not os.path.exists(plugin_dir):
+            print(f"Error: Plugin directory not found at {plugin_dir}")
             sys.exit(1)
 
-        with open(prompt_path, 'r') as f:
-            prompt_content = f.read()
+        print(f"Running Claude CLI with plugin from {plugin_dir}")
 
-        print(f"Running Claude CLI with prompt from {prompt_path}")
-
+        # Use the slash command with plugin-dir flag
+        # Add instructions to skip interactive questions and auto-save
         result = subprocess.run(
-            ['claude', 'complete', '--dangerously-skip-permissions', '-p', prompt_content],
+            [
+                'claude', '-p',
+                '--plugin-dir', plugin_dir,
+                '--dangerously-skip-permissions',
+                '--', '/context-a8c:digest Generate a new digest for today, do not ask any questions, automatically save to the default location'
+            ],
             capture_output=True,
             text=True,
             check=True,
@@ -189,36 +193,28 @@ async def generate_audio(text, output_file="digest.mp3", voice_name="Enceladus")
         
         client = genai.Client(api_key=GOOGLE_API_KEY)
         
-        # Optimized prompt for breakfast television style
-        # Using Gemini's style control capabilities for relaxed, natural delivery
+        # Optimized prompt for 2-speaker podcast
         language_instruction = ""
         if SUMMARY_LANG != "en":
             language_instruction = f"Speak in {SUMMARY_LANG} language. "
         
-        prompt = f"""{language_instruction}You're a friendly breakfast television host delivering the morning's updates. 
+        prompt = f"""{language_instruction}Generate an engaging audio podcast based on the following script.
+There are two speakers: Sarah (female voice) and Mike (male voice).
+Ensure they have distinct voices and personalities as described in the script.
+Use natural intonation, pauses, and conversational pacing.
 
-Speak at a relaxed, comfortable pace - slower than a news anchor, perfect for someone enjoying their morning coffee or breakfast. Use gentle, natural pauses between topics. Keep your tone warm, approachable, and conversational, like chatting with a friend over breakfast. Don't rush - this is morning television, not breaking news.
-
-Think of this as a cozy morning show segment. Be engaging but unhurried.
-
+Script:
 {text}"""
         
         print(f"Sending request to Gemini TTS (Length: {len(prompt)} chars)...")
         
-        # Use the Flash TTS model
+        # Use the Gemini 2.0 Flash Exp model for advanced audio generation
         try:
             response = client.models.generate_content(
-                model='gemini-2.5-flash-preview-tts',
+                model='gemini-2.5-pro-preview-tts',
                 contents=prompt,
                 config={
                     'response_modalities': ['AUDIO'],
-                    'speech_config': {
-                        'voice_config': {
-                            'prebuilt_voice_config': {
-                                'voice_name': voice_name
-                            }
-                        }
-                    }
                 }
             )
         except Exception as api_error:
@@ -333,15 +329,19 @@ async def main():
             text = f.read()
     else:
         # Run Claude to generate the digest
+        # The slash command auto-saves to the digest file, so we just need to run it
+        # and then read the file it creates (don't use stdout - that's just a summary)
         print("Running Claude to generate digest...")
-        text = get_digest_text()
+        get_digest_text()  # This triggers the slash command which auto-saves
         
-        # Save the generated text to the digest file
-        if text:
-            os.makedirs(os.path.dirname(digest_file_path), exist_ok=True)
-            with open(digest_file_path, 'w') as f:
-                f.write(text)
-            print(f"Digest saved to {digest_file_path}")
+        # Now read the file that Claude created
+        if os.path.exists(digest_file_path):
+            with open(digest_file_path, 'r') as f:
+                text = f.read()
+            print(f"Digest loaded from {digest_file_path}")
+        else:
+            print(f"Error: Claude did not create digest file at {digest_file_path}")
+            sys.exit(1)
 
 
             
@@ -372,8 +372,8 @@ async def main():
     print(f"Output filename: {audio_file}")
     
     # 2. Generate Audio
-    # Using Enceladus - optimized for morning coffee listening
-    await generate_audio(rewritten_text, audio_file, voice_name="Enceladus")
+    # Using Gemini 2.0 Flash Exp for multi-speaker podcast
+    await generate_audio(rewritten_text, audio_file)
     
     # 3. Upload
     if os.path.exists(audio_file):
