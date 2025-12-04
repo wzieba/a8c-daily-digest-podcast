@@ -60,8 +60,7 @@ def rewrite_digest_with_claude(text, language_code="en"):
     if language_code != "en":
         language_instruction = f"\n    IMPORTANT: Write the entire script in {language_code} language."
     
-    prompt = f"""
-    You are writing a podcast script based on a work digest. 
+    prompt = f"""You are writing a podcast script based on a work digest. 
     There are two hosts:
     1. Sarah (Female): Enthusiastic, leads the conversation, introduces topics.
     2. Mike (Male): Analytical, adds depth, asks clarifying questions or provides details.
@@ -76,6 +75,8 @@ def rewrite_digest_with_claude(text, language_code="en"):
     3. Keep it conversational and natural.
     4. Start with a catchy intro.
     5. Do NOT mention specific dates unless explicitly stated.
+    6. Output ONLY the script. Do NOT add any commentary, explanations, questions, or meta-text before or after the script.
+    7. Start your response directly with "Sarah:" - no preamble.
     
     Digest:
     {text}
