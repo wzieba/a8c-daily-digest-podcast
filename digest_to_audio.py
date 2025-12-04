@@ -377,7 +377,7 @@ async def main():
     # 1. Get Digest Text
     # Instead of parsing CLI output, we read the generated file
     today_str = datetime.now().strftime("%Y-%m-%d")
-    digest_file_path = f"/Users/wzieba/Automattic/Daily Digests/{today_str}.md"
+    digest_file_path = os.path.expanduser(f"~/Automattic/Daily Digests/{today_str}.md")
     
     print(f"Checking for digest file at: {digest_file_path}")
     

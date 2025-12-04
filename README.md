@@ -9,7 +9,11 @@ This script automates the creation of an audio digest from a text summary genera
 3.  **ffmpeg**: Required for audio conversion (`brew install ffmpeg` on macOS)
 4.  **Pocket Casts Account**: Premium/Plus subscription might be required for "My Files"
 5.  **Google AI Studio API Key**: For Gemini API (get one at https://aistudio.google.com/apikey)
-6.  **ContextA8C Plugin**: The Claude `/context-a8c:digest` command must be available
+6.  **ContextA8C Plugin** (REQUIRED):
+    - This script requires the ContextA8C plugin to be installed and configured
+    - The plugin must be available at: `~/.claude/plugins/marketplaces/automattic-claude-code-plugins/plugins/context-a8c`
+    - Run `/context-a8c:setup` in Claude CLI to configure your Linear teams, P2s, and Slack preferences
+    - The script expects digest files to be saved to `~/Automattic/Daily Digests/`
 
 ## Setup
 
